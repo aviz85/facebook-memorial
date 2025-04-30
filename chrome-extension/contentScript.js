@@ -5,9 +5,14 @@ const SUPABASE_URL = 'https://nuepjimdxzybberqffds.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51ZXBqaW1keHp5YmJlcnFmZmRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU5OTMyMTksImV4cCI6MjA2MTU2OTIxOX0.JI-XONtQgrTTJPdli01Ot84r1JwtYNSWodjflNzdwCU';
 
 // Global variables
-let fallenRecords = [];
+let allRecords = []; // All fetched records
+let displayQueue = []; // Records currently in the display rotation
+let preloadedImages = {}; // Cache for preloaded images
 let currentIndex = 0;
 let slideInterval = null;
+let pageSize = 20; // Number of records to fetch per page
+let currentPage = 0; // Current page number
+let totalRecords = 0; // Total number of available records
 
 // Initialize and run the extension
 async function initMemorialFeed() {
@@ -27,29 +32,30 @@ async function initMemorialFeed() {
     
     console.log('Preparing to fetch data from Supabase');
     
-    // Instead of dynamic import, use fetch directly
+    // First get the total count of approved records
     try {
-      // Fetch data using normal fetch API
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/fallen?approved=eq.true&select=name,image_path&order=created_at.desc`, {
+      const countResponse = await fetch(`${SUPABASE_URL}/rest/v1/fallen?approved=eq.true&select=count`, {
         method: 'GET',
         headers: {
           'apikey': SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Prefer': 'count=exact'
         }
       });
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!countResponse.ok) {
+        throw new Error(`HTTP error! status: ${countResponse.status}`);
       }
       
-      const data = await response.json();
+      totalRecords = parseInt(countResponse.headers.get('content-range').split('/')[1]);
+      console.log(`Total available records: ${totalRecords}`);
       
-      if (!data || data.length === 0) {
+      // Fetch first batch of records
+      await fetchNextBatch();
+      
+      if (displayQueue.length === 0) {
         throw new Error('No approved records found');
       }
-      
-      fallenRecords = data;
-      console.log(`Loaded ${fallenRecords.length} fallen records`);
       
       // Hide Facebook feed and inject memorial feed
       hideOriginalFeed();
@@ -60,6 +66,125 @@ async function initMemorialFeed() {
     }
   } catch (error) {
     console.error('Facebook Memorial Feed extension error:', error);
+  }
+}
+
+// Fetch next batch of records with pagination and randomization
+async function fetchNextBatch() {
+  try {
+    // Calculate the offset based on the current page
+    const offset = currentPage * pageSize;
+    
+    // Fetch data using pagination
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/fallen?approved=eq.true&select=name,image_path&order=created_at.desc&limit=${pageSize}&offset=${offset}`, 
+      {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const newRecords = await response.json();
+    
+    if (!newRecords || newRecords.length === 0) {
+      // If no more records, wrap around to the beginning
+      console.log('Reached end of records, returning to start');
+      currentPage = 0;
+      return fetchNextBatch();
+    }
+    
+    // Add the new records to our collection
+    allRecords = [...allRecords, ...newRecords];
+    
+    // Shuffle the new records and add to display queue
+    const shuffled = shuffleArray([...newRecords]);
+    displayQueue = [...displayQueue, ...shuffled];
+    
+    // Increment the page for next fetch
+    currentPage++;
+    
+    console.log(`Fetched ${newRecords.length} new records, display queue now has ${displayQueue.length} items`);
+    
+    // Preload the next few images
+    preloadNextImages();
+    
+    return newRecords;
+  } catch (error) {
+    console.error('Error fetching next batch:', error);
+    return [];
+  }
+}
+
+// Fisher-Yates shuffle algorithm for randomizing the records
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+// Preload the next few images
+function preloadNextImages() {
+  // Determine which images to preload
+  const startIndex = currentIndex;
+  const numToPreload = 2; // Preload the next 2 images
+  
+  for (let i = 1; i <= numToPreload; i++) {
+    const index = (startIndex + i) % displayQueue.length;
+    
+    // If we're running low on images in the queue, fetch more
+    if (index >= displayQueue.length - 3 && displayQueue.length < totalRecords) {
+      fetchNextBatch();
+    }
+    
+    // Only preload if there's an image at this index
+    if (displayQueue[index]) {
+      const record = displayQueue[index];
+      const imageUrl = `${SUPABASE_URL}/storage/v1/object/public/fallen-images/${record.image_path}`;
+      
+      // Skip if already preloaded
+      if (preloadedImages[imageUrl]) continue;
+      
+      // Create image for preloading
+      const img = new Image();
+      img.src = imageUrl;
+      
+      // Store reference to preloaded image
+      preloadedImages[imageUrl] = img;
+      
+      console.log(`Preloaded image: ${record.name}`);
+    }
+  }
+  
+  // Clean up old preloaded images to manage memory
+  cleanupOldImages();
+}
+
+// Remove old preloaded images that we don't need anymore
+function cleanupOldImages() {
+  // Keep the cache size reasonable (max 10 images)
+  const maxCacheSize = 10;
+  
+  // If cache is too large, remove oldest entries
+  const imageUrls = Object.keys(preloadedImages);
+  if (imageUrls.length > maxCacheSize) {
+    // Remove the oldest entries
+    const numToRemove = imageUrls.length - maxCacheSize;
+    const oldestUrls = imageUrls.slice(0, numToRemove);
+    
+    for (const url of oldestUrls) {
+      delete preloadedImages[url];
+    }
+    
+    console.log(`Cleaned up ${numToRemove} old preloaded images`);
   }
 }
 
@@ -208,14 +333,20 @@ function startSlideshow() {
   
   // Set up a timer to change images every 3 seconds
   slideInterval = setInterval(() => {
-    currentIndex = (currentIndex + 1) % fallenRecords.length;
+    currentIndex = (currentIndex + 1) % displayQueue.length;
+    
+    // If we're near the end of our display queue, try to fetch more
+    if (currentIndex >= displayQueue.length - 3) {
+      preloadNextImages();
+    }
+    
     showSlide(currentIndex);
   }, 3000);
 }
 
 // Display a specific slide
 function showSlide(index) {
-  const record = fallenRecords[index];
+  const record = displayQueue[index];
   const slideshowContainer = document.getElementById('memorial-slideshow');
   
   if (!slideshowContainer || !record) return;
@@ -228,9 +359,17 @@ function showSlide(index) {
   slideElement.className = 'memorial-slide memorial-fade';
   slideElement.style.opacity = '0';
   
-  // Add the image
-  const imageElement = document.createElement('img');
-  imageElement.src = imageUrl;
+  // Add the image - use preloaded image if available
+  const imageElement = new Image();
+  if (preloadedImages[imageUrl]) {
+    console.log(`Using preloaded image for ${record.name}`);
+    // Clone the preloaded image to avoid issues with reusing the same element
+    imageElement.src = preloadedImages[imageUrl].src;
+  } else {
+    console.log(`No preloaded image for ${record.name}, loading directly`);
+    imageElement.src = imageUrl;
+  }
+  
   imageElement.alt = record.name;
   imageElement.className = 'memorial-image';
   slideElement.appendChild(imageElement);
@@ -268,6 +407,9 @@ function showSlide(index) {
       slideElement.style.opacity = '1';
     }, 50);
   }
+  
+  // Preload next images after showing a slide
+  preloadNextImages();
 }
 
 // Wait for the page to be loaded
