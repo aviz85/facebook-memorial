@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import AboutModal from '../components/AboutModal';
@@ -14,7 +13,6 @@ export default function SubmitPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
-  const [isRateLimited, setIsRateLimited] = useState(false);
   
   // Set RTL direction for Hebrew text
   useEffect(() => {
@@ -45,34 +43,6 @@ export default function SubmitPage() {
       setError(null);
     }
   };
-  
-  // Function to check if user is rate limited
-  const checkRateLimit = async () => {
-    try {
-      // In a real environment, we would use the client's IP address
-      // For this example, we'll use a function that determines if submissions are allowed
-      const { data, error } = await supabase.rpc('check_submission_rate_limit', { 
-        ip: 'client-ip-would-go-here',
-        limit_count: 5,
-        cooldown_minutes: 60
-      });
-      
-      if (error) throw error;
-      
-      // If data is false, the user is rate limited
-      if (data === false) {
-        setIsRateLimited(true);
-        setError('הגעת למגבלת ההעלאות (5 העלאות בשעה). אנא נסה שוב מאוחר יותר.');
-        return false;
-      }
-      
-      return true;
-    } catch (err) {
-      console.error("Error checking rate limit:", err);
-      // If there's an error, allow the submission to proceed
-      return true;
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,10 +56,6 @@ export default function SubmitPage() {
       setError('יש לבחור תמונה');
       return;
     }
-    
-    // Check if user is rate limited before proceeding
-    const canProceed = await checkRateLimit();
-    if (!canProceed) return;
     
     setIsSubmitting(true);
     setError(null);
@@ -184,7 +150,7 @@ export default function SubmitPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              disabled={isSubmitting || isRateLimited}
+              disabled={isSubmitting}
               placeholder="למשל: סמל ראשון ישראל ישראלי"
             />
           </div>
@@ -200,7 +166,7 @@ export default function SubmitPage() {
               accept="image/*"
               onChange={handleFileChange}
               required
-              disabled={isSubmitting || isRateLimited}
+              disabled={isSubmitting}
             />
             <p className="mt-1 text-sm text-gray-500">
               ניתן להעלות תמונות מסוג JPG, PNG או WEBP
@@ -217,7 +183,7 @@ export default function SubmitPage() {
               value={connectionContext}
               onChange={(e) => setConnectionContext(e.target.value)}
               rows={3}
-              disabled={isSubmitting || isRateLimited}
+              disabled={isSubmitting}
               placeholder="למשל: קרוב משפחה, חבר ליחידה, מקור התמונה"
             ></textarea>
             <p className="mt-1 text-sm text-gray-500">
@@ -228,7 +194,7 @@ export default function SubmitPage() {
           <button
             type="submit"
             className="w-full bg-memorial-blue text-white py-2 rounded-md hover:bg-blue-800 transition-colors disabled:bg-gray-400"
-            disabled={isSubmitting || isRateLimited}
+            disabled={isSubmitting}
           >
             {isSubmitting ? 'שולח...' : 'שלח'}
           </button>

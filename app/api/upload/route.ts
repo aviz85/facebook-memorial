@@ -48,6 +48,27 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // קבלת כתובת ה-IP האמיתית של הלקוח
+    const ip = request.headers.get('x-forwarded-for') || 
+               request.headers.get('x-real-ip') || 
+               'unknown';
+    
+    // בדיקת rate limit
+    const { data: isAllowed, error: rateLimitError } = await supabase.rpc('check_submission_rate_limit', { 
+      ip: ip,
+      limit_count: 5,
+      cooldown_minutes: 60
+    });
+    
+    if (rateLimitError) {
+      console.error('Rate limit check error:', rateLimitError);
+    } else if (isAllowed === false) {
+      return NextResponse.json(
+        { error: 'הגעת למגבלת ההעלאות (5 העלאות בשעה). אנא נסה שוב מאוחר יותר.' },
+        { status: 429 }
+      );
+    }
+    
     // יצירת שם קובץ ייחודי
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
