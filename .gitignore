@@ -44,8 +44,12 @@ next-env.d.ts
 *.swo
 
 # Generated files
-public/downloads/
-*.zip
+# Allow the Chrome extension zip file to be committed
+# public/downloads/
+# *.zip
+# Instead, ignore all except the extension
+public/downloads/*
+!public/downloads/facebook-memorial-extension.zip
 
 # Logs
 logs
