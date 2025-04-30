@@ -17,6 +17,10 @@
   ],
   "permissions": ["activeTab", "storage"],
   "host_permissions": [
-    "*://*.supabase.co/*"
-  ]
+    "*://*.supabase.co/*",
+    "*://*.jsdelivr.net/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 } 

@@ -16,42 +16,48 @@ async function initMemorialFeed() {
     
     // Check if it's Israel Memorial Day or if extension is force enabled
     const isForceEnabled = await isExtensionForceEnabled();
-    if (!isMemorialDay() && !isForceEnabled) {
-      console.log('Not Memorial Day and extension not forced, exiting');
-      return;
+    console.log('Force enabled check completed:', isForceEnabled);
+    
+    // For testing, always run regardless of Memorial Day
+    // Remove the condition check for now
+    // if (!isMemorialDay() && !isForceEnabled) {
+    //   console.log('Not Memorial Day and extension not forced, exiting');
+    //   return;
+    // }
+    
+    console.log('Preparing to fetch data from Supabase');
+    
+    // Instead of dynamic import, use fetch directly
+    try {
+      // Fetch data using normal fetch API
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/fallen?approved=eq.true&select=name,image_path&order=created_at.desc`, {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data || data.length === 0) {
+        throw new Error('No approved records found');
+      }
+      
+      fallenRecords = data;
+      console.log(`Loaded ${fallenRecords.length} fallen records`);
+      
+      // Hide Facebook feed and inject memorial feed
+      hideOriginalFeed();
+      injectMemorialFeed();
+      startSlideshow();
+    } catch (fetchError) {
+      console.error('Error fetching data:', fetchError);
     }
-    
-    // Import Supabase client from CDN
-    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-    
-    // Create Supabase client
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: false }
-    });
-    
-    // Fetch approved records from Supabase
-    const { data, error } = await supabase
-      .from('fallen')
-      .select('name,image_path')
-      .eq('approved', true)
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      throw new Error('Failed to fetch data: ' + error.message);
-    }
-    
-    if (!data || data.length === 0) {
-      throw new Error('No approved records found');
-    }
-    
-    fallenRecords = data;
-    console.log(`Loaded ${fallenRecords.length} fallen records`);
-    
-    // Hide Facebook feed and inject memorial feed
-    hideOriginalFeed();
-    injectMemorialFeed();
-    startSlideshow();
-    
   } catch (error) {
     console.error('Facebook Memorial Feed extension error:', error);
   }
