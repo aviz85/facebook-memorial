@@ -15,6 +15,7 @@ let slideInterval = null;
 let pageSize = 20; // Number of records to fetch per page
 let currentPage = 0; // Current page number
 let totalRecords = 0; // Total number of available records
+let isTransitioning = false; // Flag to prevent multiple transitions at once
 
 // Mock data for testing when no real records exist
 const MOCK_RECORDS = [
@@ -50,18 +51,17 @@ async function initMemorialFeed() {
     
     // Add debugging for DOM readiness
     console.log('Document ready state:', document.readyState);
-    console.log('Feed element exists:', !!document.querySelector('div[role="feed"]'));
     
     // Check if it's Israel Memorial Day or if extension is force enabled
     const isForceEnabled = await isExtensionForceEnabled();
     console.log('Force enabled check completed:', isForceEnabled);
     
-    // For testing, always run regardless of Memorial Day
-    // Remove the condition check for now
-    // if (!isMemorialDay() && !isForceEnabled) {
-    //   console.log('Not Memorial Day and extension not forced, exiting');
-    //   return;
-    // }
+    // Don't run if extension is not force enabled (and not Memorial Day)
+    // In production, you'd uncomment the isMemorialDay() check too
+    if (!isForceEnabled) {
+      console.log('Extension not forced, exiting');
+      return;
+    }
     
     console.log('Preparing to fetch data from Supabase');
     
@@ -105,18 +105,8 @@ async function initMemorialFeed() {
         throw new Error('Failed to load records and mock data');
       }
       
-      // Hide Facebook feed and inject memorial feed
-      const feedHidden = hideOriginalFeed();
-      console.log('Feed hiding result:', feedHidden);
-      
-      if (!feedHidden) {
-        console.log('Feed elements not found yet, will retry soon');
-        // Schedule a retry
-        setTimeout(initMemorialFeed, 2000);
-        return;
-      }
-      
-      injectMemorialFeed();
+      // Replace the entire page with our memorial content
+      replacePageContent();
       startSlideshow();
     } catch (fetchError) {
       console.error('Error fetching data:', fetchError);
@@ -130,16 +120,9 @@ async function initMemorialFeed() {
         displayQueue = [...MOCK_RECORDS];
       }
       
-      const feedHidden = hideOriginalFeed();
-      console.log('Feed hiding result after error:', feedHidden);
-      
-      if (feedHidden) {
-        injectMemorialFeed();
-        startSlideshow();
-      } else {
-        // Schedule a retry
-        setTimeout(initMemorialFeed, 2000);
-      }
+      // Replace the entire page regardless of fetch errors
+      replacePageContent();
+      startSlideshow();
     }
   } catch (error) {
     console.error('Facebook Memorial Feed extension error:', error);
@@ -149,10 +132,17 @@ async function initMemorialFeed() {
 // Fetch next batch of records with pagination and randomization
 async function fetchNextBatch() {
   try {
+    // If we already have mock data and no real records, just return
+    if (displayQueue.length > 0 && totalRecords === 0) {
+      console.log('Already using mock data, no need to fetch more');
+      return displayQueue;
+    }
+    
     // Calculate the offset based on the current page
     const offset = currentPage * pageSize;
     
     // Fetch data using pagination
+    console.log(`Attempting to fetch batch from Supabase with offset ${offset}`);
     const response = await fetch(
       `${SUPABASE_URL}/rest/v1/fallen?approved=eq.true&select=name,image_path&order=created_at.desc&limit=${pageSize}&offset=${offset}`, 
       {
@@ -169,22 +159,37 @@ async function fetchNextBatch() {
     }
     
     const newRecords = await response.json();
+    console.log(`Response from Supabase contains ${newRecords.length} records`);
     
     if (!newRecords || newRecords.length === 0) {
       console.log('No records found in Supabase');
       
       // If there are no records at all and this is the first fetch, use mock data
-      if (displayQueue.length === 0 && totalRecords === 0) {
-        console.log('Using mock data for testing');
-        totalRecords = MOCK_RECORDS.length;
-        displayQueue = [...MOCK_RECORDS];
-        return MOCK_RECORDS;
+      if (displayQueue.length === 0) {
+        console.log('Using mock data for testing - no records found in database');
+        // Create a deep copy of mock records to avoid modifications
+        const mockData = JSON.parse(JSON.stringify(MOCK_RECORDS));
+        totalRecords = mockData.length;
+        
+        // Add to display queue
+        displayQueue = [...mockData];
+        console.log(`Added ${mockData.length} mock records to display queue`);
+        return mockData;
       }
       
-      // If no more records, wrap around to the beginning
+      // If no more records, and we're not using mock data yet, switch to mock
+      if (totalRecords === 0) {
+        console.log('No records in database, switching to mock data');
+        const mockData = JSON.parse(JSON.stringify(MOCK_RECORDS));
+        totalRecords = mockData.length;
+        displayQueue = [...mockData];
+        return mockData;
+      }
+      
+      // If we already have some real records but reached the end
       console.log('Reached end of records, returning to start');
       currentPage = 0;
-      return fetchNextBatch();
+      return [];
     }
     
     // Add the new records to our collection
@@ -209,9 +214,14 @@ async function fetchNextBatch() {
     // Use mock data on error if we have no records yet
     if (displayQueue.length === 0) {
       console.log('Using mock data due to fetch error');
-      totalRecords = MOCK_RECORDS.length;
-      displayQueue = [...MOCK_RECORDS];
-      return MOCK_RECORDS;
+      
+      // Create a deep copy of mock records
+      const mockData = JSON.parse(JSON.stringify(MOCK_RECORDS));
+      totalRecords = mockData.length;
+      displayQueue = [...mockData];
+      
+      console.log(`Added ${mockData.length} mock records after fetch error`);
+      return mockData;
     }
     
     return [];
@@ -315,8 +325,10 @@ function isExtensionForceEnabled() {
   });
 }
 
-// Hide the original Facebook feed
-function hideOriginalFeed() {
+// Replace entire page with memorial content
+function replacePageContent() {
+  console.log('Replacing entire page content with memorial feed');
+  
   // Add a visual debug element to the page to show the script is running
   const debugMark = document.createElement('div');
   debugMark.style.position = 'fixed';
@@ -330,97 +342,14 @@ function hideOriginalFeed() {
   debugMark.textContent = 'Memorial Feed Active';
   document.body.appendChild(debugMark);
 
-  // Primary candidates to hide - using a combination of robust selectors
-  const feedSelectors = [
-    // Feed containers by role attribute (most stable)
-    'div[role="feed"]',
-    // Main feed container with typical class pattern
-    'div.x193iq5w',
-    // Post creation area
-    'div[aria-label="Create a post"]',
-    'div[aria-label="יצירת פוסט"]', // Hebrew version
-    // Common feed item containers
-    '.x1lliihq',
-    // Facebook news feed containers
-    '[data-pagelet="FeedUnit"]',
-    '#stream_pagelet',
-    '[data-pagelet="Stories"]',
-    // More precise feed content containers
-    'div.x1hc1fzr',
-    'div.x1iorvi4',
-    // Timeline containers
-    'div[role="main"] > div > div > div > div',
-    'div.x78zum5',
-    'div[data-pagelet="ProfileTimeline"]'
-  ];
+  // Save the original content in case we need to restore it later
+  const originalContent = document.body.innerHTML;
   
-  // Use content-based fallback selectors as well
-  const contentSelectors = [
-    // Elements containing typical feed texts
-    'span:contains("What\'s on your mind")',
-    'span:contains("מה בראש שלך")', // Hebrew version
-    'h3:contains("Create a post")',
-    'h3:contains("יצירת פוסט")' // Hebrew version
-  ];
+  // Create our memorial page container
+  const memorialPage = document.createElement('div');
+  memorialPage.id = 'memorial-page';
+  memorialPage.className = 'memorial-page';
   
-  let feedElementsFound = false;
-  
-  // Try to find and hide feed elements
-  for (const selector of feedSelectors) {
-    try {
-      const elements = document.querySelectorAll(selector);
-      console.log(`Selector "${selector}" found ${elements.length} elements`);
-      
-      if (elements.length > 0) {
-        feedElementsFound = true;
-        for (const element of elements) {
-          element.style.display = 'none';
-          console.log('Hidden element:', element);
-        }
-      }
-    } catch (e) {
-      console.error(`Error with selector "${selector}":`, e);
-    }
-  }
-  
-  // If none of the primary selectors worked, look for parent elements of content
-  if (!feedElementsFound) {
-    for (const selector of contentSelectors) {
-      try {
-        const elements = document.querySelectorAll(selector);
-        console.log(`Content selector "${selector}" found ${elements.length} elements`);
-        
-        for (const element of elements) {
-          // Hide the fourth ancestor which is typically the feed container
-          let parent = element;
-          for (let i = 0; i < 4 && parent; i++) {
-            parent = parent.parentElement;
-          }
-          if (parent) {
-            parent.style.display = 'none';
-            console.log('Hidden parent element:', parent);
-            feedElementsFound = true;
-          }
-        }
-      } catch (e) {
-        console.error(`Error with content selector "${selector}":`, e);
-      }
-    }
-  }
-  
-  // Find a good insertion point - prioritize main content area
-  const insertionTarget = document.querySelector('[role="main"]') || 
-         document.querySelector('div.x193iq5w') || 
-         document.querySelector('div.xod5an3') || 
-         document.body;
-  
-  console.log('Found insertion target:', insertionTarget);
-  
-  return feedElementsFound;
-}
-
-// Inject our memorial feed container
-function injectMemorialFeed() {
   // Create container for our memorial feed
   const memorialContainer = document.createElement('div');
   memorialContainer.id = 'memorial-feed-container';
@@ -432,26 +361,190 @@ function injectMemorialFeed() {
   headline.className = 'memorial-headline';
   memorialContainer.appendChild(headline);
   
+  // Add subheadline
+  const subheadline = document.createElement('h2');
+  subheadline.textContent = 'לזכרם';
+  subheadline.className = 'memorial-subheadline';
+  memorialContainer.appendChild(subheadline);
+  
   // Add slideshow container
   const slideshowContainer = document.createElement('div');
   slideshowContainer.id = 'memorial-slideshow';
   slideshowContainer.className = 'memorial-slideshow';
   memorialContainer.appendChild(slideshowContainer);
   
-  // Find a good insertion point and insert our container
-  const targetElement = hideOriginalFeed();
-  if (targetElement) {
-    targetElement.prepend(memorialContainer);
-  } else {
-    // Fallback to body if no better target found
-    document.body.prepend(memorialContainer);
-  }
-
-  // Return the created elements for testing purposes
+  // Add message
+  const message = document.createElement('p');
+  message.textContent = 'במקום לגלול בפייסבוק, אנו מציגים את זכרם של הנופלים';
+  message.className = 'memorial-message';
+  memorialContainer.appendChild(message);
+  
+  // Add button to restore original content if needed
+  const restoreButton = document.createElement('button');
+  restoreButton.textContent = 'חזרה לפייסבוק';
+  restoreButton.className = 'memorial-button';
+  restoreButton.onclick = function() {
+    // Store the decision in local storage
+    chrome.storage.sync.set({ forceEnabled: false }, function() {
+      console.log('Disabled memorial feed');
+      
+      // Don't reload, just restore original content if possible
+      try {
+        document.body.innerHTML = originalContent;
+        console.log('Restored original content without reload');
+      } catch (e) {
+        console.error('Failed to restore content, reloading page', e);
+        // Fallback to reload
+        window.location.reload();
+      }
+    });
+  };
+  memorialContainer.appendChild(restoreButton);
+  
+  // Add the container to our page
+  memorialPage.appendChild(memorialContainer);
+  
+  // Inject CSS styles directly to ensure they load
+  injectStyles();
+  
+  // Clear the body and add our content
+  document.body.innerHTML = '';
+  document.body.appendChild(memorialPage);
+  
+  // Re-add the debug mark since we cleared the body
+  document.body.appendChild(debugMark);
+  
   return {
     container: memorialContainer,
     slideshow: slideshowContainer
   };
+}
+
+// Inject CSS styles directly into the page
+function injectStyles() {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = `
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f0f2f5;
+      font-family: Arial, sans-serif;
+    }
+    
+    .memorial-page {
+      width: 100%;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: #f0f2f5;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    
+    .memorial-container {
+      max-width: 800px;
+      width: 100%;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      direction: rtl;
+      text-align: center;
+      padding: 20px;
+    }
+    
+    .memorial-headline {
+      color: #1877f2;
+      font-size: 24px;
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+    
+    .memorial-subheadline {
+      color: #333;
+      font-size: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .memorial-slideshow {
+      position: relative;
+      height: 500px;
+      overflow: hidden;
+      background-color: #000;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    
+    .memorial-slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .memorial-image {
+      max-height: 400px;
+      max-width: 100%;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+    
+    .memorial-name {
+      color: white;
+      background-color: rgba(0, 0, 0, 0.7);
+      padding: 10px 20px;
+      border-radius: 4px;
+      margin-top: 10px;
+      font-size: 20px;
+    }
+    
+    .memorial-message {
+      color: #333;
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+    
+    .memorial-button {
+      background-color: #1877f2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    
+    .memorial-button:hover {
+      background-color: #166fe5;
+    }
+    
+    .memorial-fade {
+      transition: opacity 1s ease-in-out;
+    }
+    
+    @media (max-width: 600px) {
+      .memorial-container {
+        margin: 10px;
+        width: auto;
+      }
+      
+      .memorial-slideshow {
+        height: 400px;
+      }
+      
+      .memorial-headline {
+        font-size: 20px;
+      }
+    }
+  `;
+  document.head.appendChild(styleElement);
 }
 
 // Start the slideshow rotating through the fallen records
@@ -459,12 +552,16 @@ function startSlideshow() {
   // If we have an existing interval, clear it
   if (slideInterval) {
     clearInterval(slideInterval);
+    slideInterval = null;
   }
+  
+  // Create two permanent slide elements
+  setupSlideContainers();
   
   // Show the first image immediately
   showSlide(currentIndex);
   
-  // Set up a timer to change images every 3 seconds
+  // Set up a timer to change images every 5 seconds
   slideInterval = setInterval(() => {
     currentIndex = (currentIndex + 1) % displayQueue.length;
     
@@ -474,7 +571,32 @@ function startSlideshow() {
     }
     
     showSlide(currentIndex);
-  }, 3000);
+  }, 2000);
+}
+
+// Create permanent slide containers
+function setupSlideContainers() {
+  const slideshowContainer = document.getElementById('memorial-slideshow');
+  if (!slideshowContainer) {
+    console.error('Slideshow container not found');
+    return;
+  }
+  
+  // Clear any existing content
+  slideshowContainer.innerHTML = '';
+  
+  // Create two permanent slides that we'll toggle between
+  const slide1 = document.createElement('div');
+  slide1.className = 'memorial-slide';
+  slide1.id = 'memorial-slide-1';
+  slide1.style.opacity = '1'; // First slide is visible
+  slideshowContainer.appendChild(slide1);
+  
+  const slide2 = document.createElement('div');
+  slide2.className = 'memorial-slide';
+  slide2.id = 'memorial-slide-2';
+  slide2.style.opacity = '0'; // Second slide is hidden
+  slideshowContainer.appendChild(slide2);
 }
 
 // Display a specific slide
@@ -482,7 +604,30 @@ function showSlide(index) {
   const record = displayQueue[index];
   const slideshowContainer = document.getElementById('memorial-slideshow');
   
-  if (!slideshowContainer || !record) return;
+  if (!slideshowContainer) {
+    console.error('Slideshow container not found');
+    return;
+  }
+  
+  if (!record) {
+    console.error('No record found at index', index);
+    
+    // If we have no records at all, create a fallback record
+    if (displayQueue.length === 0) {
+      console.log('Display queue is empty, creating fallback record');
+      const fallbackRecord = {
+        name: "תמונת זיכרון",
+        image_path: "mock-image1.jpg"
+      };
+      displayQueue.push(fallbackRecord);
+      setTimeout(() => showSlide(0), 100); // Retry with the fallback record
+      return;
+    }
+    
+    return;
+  }
+  
+  console.log(`Showing slide for: ${record.name}`);
   
   // Create image URL from path
   let imageUrl;
@@ -496,95 +641,100 @@ function showSlide(index) {
     imageUrl = `${SUPABASE_URL}/storage/v1/object/public/fallen-images/${record.image_path}`;
   }
   
-  // Create the new slide
-  const slideElement = document.createElement('div');
-  slideElement.className = 'memorial-slide memorial-fade';
-  slideElement.style.opacity = '0';
+  // Find which slide is currently visible and which is hidden
+  const slide1 = document.getElementById('memorial-slide-1');
+  const slide2 = document.getElementById('memorial-slide-2');
   
-  // Add the image - use preloaded image if available
+  if (!slide1 || !slide2) {
+    console.error('Slide elements not found, recreating them');
+    setupSlideContainers();
+    setTimeout(() => showSlide(index), 100);
+    return;
+  }
+  
+  const visibleSlide = slide1.style.opacity === '1' ? slide1 : slide2;
+  const hiddenSlide = slide1.style.opacity === '0' ? slide1 : slide2;
+  
+  // Prepare the hidden slide with new content before showing it
+  hiddenSlide.innerHTML = '';
+  
+  // Create and add the image
   const imageElement = new Image();
+  imageElement.className = 'memorial-image';
+  imageElement.alt = record.name;
+  
+  // Use preloaded image if available
   if (preloadedImages[imageUrl]) {
     console.log(`Using preloaded image for ${record.name}`);
-    // Clone the preloaded image to avoid issues with reusing the same element
     imageElement.src = preloadedImages[imageUrl].src;
   } else {
     console.log(`No preloaded image for ${record.name}, loading directly`);
     imageElement.src = imageUrl;
   }
   
-  imageElement.alt = record.name;
-  imageElement.className = 'memorial-image';
+  // Handle image load errors
   imageElement.onerror = function() {
-    // If image fails to load, use a fallback
     console.log('Image failed to load, using fallback');
     this.src = 'https://via.placeholder.com/400x600.png?text=Memorial+Image';
     this.onerror = null; // Prevent infinite error handling loop
   };
-  slideElement.appendChild(imageElement);
+  
+  hiddenSlide.appendChild(imageElement);
   
   // Add the name
   const nameElement = document.createElement('h2');
   nameElement.textContent = record.name;
   nameElement.className = 'memorial-name';
-  slideElement.appendChild(nameElement);
+  hiddenSlide.appendChild(nameElement);
   
-  // Replace existing slide or add the first one
-  if (slideshowContainer.childElementCount > 0) {
-    const currentSlide = slideshowContainer.firstChild;
-    
-    // Add the new slide with opacity 0
-    slideshowContainer.appendChild(slideElement);
-    
-    // Trigger fade in for new slide
-    setTimeout(() => {
-      slideElement.style.opacity = '1';
-      // Fade out the old slide
-      currentSlide.style.opacity = '0';
-      
-      // After transition completes, remove the old slide
-      setTimeout(() => {
-        slideshowContainer.removeChild(currentSlide);
-      }, 1000); // Match the CSS transition duration
-    }, 50);
+  // Wait for image to load before starting transition
+  if (imageElement.complete) {
+    swapSlides(visibleSlide, hiddenSlide);
   } else {
-    // First slide, just show it
-    slideshowContainer.appendChild(slideElement);
+    // If image is still loading, wait for it
+    imageElement.onload = () => {
+      swapSlides(visibleSlide, hiddenSlide);
+    };
     
-    // Trigger fade in
+    // If loading takes too long, show anyway after a timeout
     setTimeout(() => {
-      slideElement.style.opacity = '1';
-    }, 50);
+      if (hiddenSlide.style.opacity === '0') {
+        swapSlides(visibleSlide, hiddenSlide);
+      }
+    }, 2000);
   }
   
-  // Preload next images after showing a slide
+  // Preload next images for smoother viewing
   preloadNextImages();
+}
+
+// Simple function to swap slide visibility
+function swapSlides(currentSlide, nextSlide) {
+  // Fade in the new slide
+  nextSlide.style.opacity = '1';
+  // Fade out the current slide
+  currentSlide.style.opacity = '0';
 }
 
 // Set up repeated checks to make sure the extension activates properly
 let activationAttempts = 0;
-const MAX_ACTIVATION_ATTEMPTS = 10;
-const ACTIVATION_INTERVAL = 2000; // 2 seconds
+const MAX_ACTIVATION_ATTEMPTS = 3; // Reduced since we don't need to wait for feed
+const ACTIVATION_INTERVAL = 1000; // 1 second
 
 function attemptActivation() {
   console.log(`Activation attempt ${activationAttempts + 1}/${MAX_ACTIVATION_ATTEMPTS}`);
   
   if (activationAttempts >= MAX_ACTIVATION_ATTEMPTS) {
-    console.log('Reached max activation attempts');
+    console.log('Reached max activation attempts, trying anyway');
+    initMemorialFeed();
     return;
   }
   
   activationAttempts++;
   
-  // Check if the feed is present yet
-  const feedElement = document.querySelector('div[role="feed"]');
-  
-  if (feedElement) {
-    console.log('Feed element found, initializing memorial feed');
-    initMemorialFeed();
-  } else {
-    console.log('Feed element not found yet, will retry soon');
-    setTimeout(attemptActivation, ACTIVATION_INTERVAL);
-  }
+  // We're no longer looking for feed elements, just start the process
+  console.log('Initializing memorial feed on attempt ' + activationAttempts);
+  initMemorialFeed();
 }
 
 // Start activation attempts when the DOM is ready

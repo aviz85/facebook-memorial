@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Facebook Memorial Feed</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      width: 300px;
+      padding: 15px;
+      direction: rtl;
+    }
+    h1 {
+      font-size: 18px;
+      margin-top: 0;
+      color: #3b5998;
+    }
+    .status {
+      margin: 15px 0;
+      padding: 8px;
+      background-color: #f0f2f5;
+      border-radius: 4px;
+    }
+    .controls {
+      margin-top: 15px;
+    }
+    button {
+      background-color: #3b5998;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover {
+      background-color: #2d4373;
+    }
+    .checkbox-container {
+      margin: 15px 0;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #dddfe2;
+      margin: 15px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Facebook Memorial Feed</h1>
+  
+  <div class="status" id="status">
+    סטטוס: בודק...
+  </div>
+  
+  <div class="checkbox-container">
+    <label>
+      <input type="checkbox" id="enable-outside-memorial-day">
+      הפעל גם מחוץ ליום הזיכרון
+    </label>
+  </div>
+  
+  <hr>
+  
+  <div class="controls">
+    <button id="refresh-button">רענן עכשיו</button>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html> 
