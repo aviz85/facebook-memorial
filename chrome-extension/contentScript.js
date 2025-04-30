@@ -16,6 +16,33 @@ let pageSize = 20; // Number of records to fetch per page
 let currentPage = 0; // Current page number
 let totalRecords = 0; // Total number of available records
 
+// Mock data for testing when no real records exist
+const MOCK_RECORDS = [
+  {
+    name: "דוגמה - יוסי כהן ז״ל",
+    image_path: "mock-image1.jpg"
+  },
+  {
+    name: "דוגמה - רחל לוי ז״ל",
+    image_path: "mock-image2.jpg"
+  },
+  {
+    name: "דוגמה - דוד שמעוני ז״ל",
+    image_path: "mock-image3.jpg"
+  }
+];
+
+// Function to get mock image URL
+function getMockImageUrl(index) {
+  // Use placeholder image services
+  const placeholderUrls = [
+    'https://via.placeholder.com/400x600.png?text=Memorial+Image+1',
+    'https://via.placeholder.com/400x600.png?text=Memorial+Image+2',
+    'https://via.placeholder.com/400x600.png?text=Memorial+Image+3'
+  ];
+  return placeholderUrls[index % placeholderUrls.length];
+}
+
 // Initialize and run the extension
 async function initMemorialFeed() {
   try {
@@ -56,18 +83,26 @@ async function initMemorialFeed() {
       const contentRange = countResponse.headers.get('content-range');
       console.log('Content range header:', contentRange);
       
+      // If no content range header, assume no records
       if (!contentRange) {
-        throw new Error('Missing content-range header');
+        console.log('No content-range header, assuming no records exist');
+        totalRecords = 0;
+      } else {
+        try {
+          totalRecords = parseInt(contentRange.split('/')[1]);
+          console.log(`Total available records: ${totalRecords}`);
+        } catch (e) {
+          console.error('Error parsing content-range header:', e);
+          totalRecords = 0;
+        }
       }
-      
-      totalRecords = parseInt(contentRange.split('/')[1]);
-      console.log(`Total available records: ${totalRecords}`);
       
       // Fetch first batch of records
       await fetchNextBatch();
       
       if (displayQueue.length === 0) {
-        throw new Error('No approved records found');
+        console.log('No display queue after fetchNextBatch, this should not happen with mock data');
+        throw new Error('Failed to load records and mock data');
       }
       
       // Hide Facebook feed and inject memorial feed
@@ -85,6 +120,26 @@ async function initMemorialFeed() {
       startSlideshow();
     } catch (fetchError) {
       console.error('Error fetching data:', fetchError);
+      
+      // Still try to show mock data and UI even if fetch fails
+      console.log('Attempting to continue with mock data despite fetch error');
+      
+      // Set up mock data if we have nothing
+      if (displayQueue.length === 0) {
+        totalRecords = MOCK_RECORDS.length;
+        displayQueue = [...MOCK_RECORDS];
+      }
+      
+      const feedHidden = hideOriginalFeed();
+      console.log('Feed hiding result after error:', feedHidden);
+      
+      if (feedHidden) {
+        injectMemorialFeed();
+        startSlideshow();
+      } else {
+        // Schedule a retry
+        setTimeout(initMemorialFeed, 2000);
+      }
     }
   } catch (error) {
     console.error('Facebook Memorial Feed extension error:', error);
@@ -116,6 +171,16 @@ async function fetchNextBatch() {
     const newRecords = await response.json();
     
     if (!newRecords || newRecords.length === 0) {
+      console.log('No records found in Supabase');
+      
+      // If there are no records at all and this is the first fetch, use mock data
+      if (displayQueue.length === 0 && totalRecords === 0) {
+        console.log('Using mock data for testing');
+        totalRecords = MOCK_RECORDS.length;
+        displayQueue = [...MOCK_RECORDS];
+        return MOCK_RECORDS;
+      }
+      
       // If no more records, wrap around to the beginning
       console.log('Reached end of records, returning to start');
       currentPage = 0;
@@ -140,6 +205,15 @@ async function fetchNextBatch() {
     return newRecords;
   } catch (error) {
     console.error('Error fetching next batch:', error);
+    
+    // Use mock data on error if we have no records yet
+    if (displayQueue.length === 0) {
+      console.log('Using mock data due to fetch error');
+      totalRecords = MOCK_RECORDS.length;
+      displayQueue = [...MOCK_RECORDS];
+      return MOCK_RECORDS;
+    }
+    
     return [];
   }
 }
@@ -411,7 +485,16 @@ function showSlide(index) {
   if (!slideshowContainer || !record) return;
   
   // Create image URL from path
-  const imageUrl = `${SUPABASE_URL}/storage/v1/object/public/fallen-images/${record.image_path}`;
+  let imageUrl;
+  
+  // If it's a mock record, use placeholder image
+  if (record.image_path.startsWith('mock-image')) {
+    const mockIndex = parseInt(record.image_path.replace('mock-image', '').replace('.jpg', '')) - 1;
+    imageUrl = getMockImageUrl(mockIndex);
+    console.log('Using mock image URL:', imageUrl);
+  } else {
+    imageUrl = `${SUPABASE_URL}/storage/v1/object/public/fallen-images/${record.image_path}`;
+  }
   
   // Create the new slide
   const slideElement = document.createElement('div');
@@ -431,6 +514,12 @@ function showSlide(index) {
   
   imageElement.alt = record.name;
   imageElement.className = 'memorial-image';
+  imageElement.onerror = function() {
+    // If image fails to load, use a fallback
+    console.log('Image failed to load, using fallback');
+    this.src = 'https://via.placeholder.com/400x600.png?text=Memorial+Image';
+    this.onerror = null; // Prevent infinite error handling loop
+  };
   slideElement.appendChild(imageElement);
   
   // Add the name
