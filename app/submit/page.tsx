@@ -95,33 +95,22 @@ export default function SubmitPage() {
     setError(null);
     
     try {
-      // Generate a unique file name with the original extension
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${uuidv4()}.${fileExt}`;
+      // יצירת FormData לשליחת הנתונים והתמונה
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('file', file);
+      formData.append('connectionContext', connectionContext);
       
-      // Upload the image to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('fallen-images')
-        .upload(fileName, file);
+      // שליחה לשרת
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
       
-      if (uploadError) {
-        throw uploadError;
-      }
+      const result = await response.json();
       
-      // Submit record to the database
-      const { error: insertError } = await supabase
-        .from('fallen')
-        .insert([
-          { 
-            name, 
-            image_path: fileName,
-            approved: false,
-            connection_context: connectionContext
-          }
-        ]);
-      
-      if (insertError) {
-        throw insertError;
+      if (!response.ok) {
+        throw new Error(result.error || 'אירעה שגיאה בעת שליחת הטופס');
       }
       
       // Success!
@@ -131,7 +120,7 @@ export default function SubmitPage() {
       setConnectionContext('');
     } catch (err: any) {
       console.error('Error submitting form:', err);
-      setError('אירעה שגיאה בעת שליחת הטופס. אנא נסה שנית מאוחר יותר.');
+      setError(err.message || 'אירעה שגיאה בעת שליחת הטופס. אנא נסה שנית מאוחר יותר.');
     } finally {
       setIsSubmitting(false);
     }
