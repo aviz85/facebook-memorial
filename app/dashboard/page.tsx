@@ -10,21 +10,66 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [password, setPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
 
-  // Check if current user is admin
+  // Check if user is authenticated on component mount
   useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && user.user_metadata && user.user_metadata.role === 'admin') {
-        setIsAdmin(true);
-        fetchPendingRecords();
-      } else {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth');
+        const data = await response.json();
+        
+        if (data.isAuthenticated) {
+          setIsAdmin(true);
+          fetchPendingRecords();
+        } else {
+          // Fallback to Supabase auth if available
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && user.user_metadata && user.user_metadata.role === 'admin') {
+            setIsAdmin(true);
+            fetchPendingRecords();
+          }
+        }
+      } catch (err) {
+        console.error('Error checking authentication:', err);
+      } finally {
         setLoading(false);
       }
     };
     
-    checkAdmin();
+    checkAuth();
   }, []);
+
+  // Handle password authentication
+  const handleAuthenticate = async () => {
+    setAuthLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch('/api/auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setIsAdmin(true);
+        fetchPendingRecords();
+      } else {
+        setError(data.error || 'שגיאת התחברות');
+      }
+    } catch (err) {
+      setError('שגיאת התחברות');
+      console.error('Authentication error:', err);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   const fetchPendingRecords = async () => {
     try {
@@ -55,6 +100,18 @@ export default function DashboardPage() {
     }
   };
 
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth', {
+        method: 'DELETE',
+      });
+      setIsAdmin(false);
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -67,16 +124,42 @@ export default function DashboardPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4">
         <div className="max-w-md w-full bg-white dark:bg-memorial-gray rounded-lg shadow-lg p-8 text-center">
-          <h1 className="text-2xl font-bold mb-4 text-memorial-blue dark:text-white">גישה נדחית</h1>
-          <p className="mb-6">
-            רק מנהלים רשאים לגשת לעמוד זה.
-          </p>
-          <Link 
-            href="/" 
-            className="inline-block bg-memorial-blue text-white px-4 py-2 rounded-md"
-          >
-            חזרה לדף הראשי
-          </Link>
+          <h1 className="text-2xl font-bold mb-4 text-memorial-blue dark:text-white">כניסה למנהלים</h1>
+          
+          {error && (
+            <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-md">
+              {error}
+            </div>
+          )}
+          
+          <div className="mb-4">
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="הזן סיסמת מנהל"
+              className="w-full p-2 border border-gray-300 rounded-md text-right"
+              onKeyDown={(e) => e.key === 'Enter' && handleAuthenticate()}
+              disabled={authLoading}
+            />
+          </div>
+          
+          <div className="flex justify-between">
+            <button 
+              onClick={handleAuthenticate}
+              className="bg-memorial-blue text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-400"
+              disabled={authLoading}
+            >
+              {authLoading ? 'מתחבר...' : 'כניסה'}
+            </button>
+            
+            <Link 
+              href="/" 
+              className="bg-gray-200 text-memorial-gray px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
+            >
+              חזרה לדף הראשי
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -84,9 +167,17 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6 text-memorial-blue dark:text-white">
-        ניהול בקשות העלאה
-      </h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-memorial-blue dark:text-white">
+          ניהול בקשות העלאה
+        </h1>
+        <button
+          onClick={handleLogout}
+          className="text-sm text-gray-500 hover:text-red-500 transition-colors"
+        >
+          התנתק
+        </button>
+      </div>
       
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
