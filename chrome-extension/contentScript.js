@@ -1,4 +1,6 @@
 console.log('Facebook Memorial Feed extension loaded!');
+// Add visual confirmation that the extension is running
+console.warn('FACEBOOK MEMORIAL FEED EXTENSION IS ACTIVE - CHECK LOG FOR DETAILS');
 
 // Configuration - Supabase credentials
 const SUPABASE_URL = 'https://nuepjimdxzybberqffds.supabase.co';
@@ -412,6 +414,17 @@ function showSlide(index) {
   preloadNextImages();
 }
 
+// For early loading on page load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing immediately');
+    initMemorialFeed();
+  });
+} else {
+  console.log('Document already loaded, initializing immediately');
+  initMemorialFeed();
+}
+
 // Wait for the page to be loaded
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, will initialize memorial feed shortly');
@@ -436,4 +449,20 @@ window.addEventListener('load', () => {
 console.log('Attempting immediate initialization');
 setTimeout(() => {
   initMemorialFeed();
-}, 500); 
+}, 500);
+
+// Listen for messages from the background script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Content script received message:', message);
+  
+  if (message.action === 'checkStatus') {
+    console.log('Status check received, extension is active');
+    sendResponse({ status: 'active' });
+    
+    // Force reinitialize
+    initMemorialFeed();
+  }
+  
+  // Return true to indicate async response
+  return true;
+}); 

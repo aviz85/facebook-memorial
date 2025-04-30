@@ -7,15 +7,18 @@
     "page": "options.html",
     "open_in_tab": true
   },
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["*://*.facebook.com/*"],
       "js": ["contentScript.js"],
       "css": ["styles.css"],
-      "run_at": "document_end"
+      "run_at": "document_start"
     }
   ],
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "storage", "tabs"],
   "host_permissions": [
     "*://*.supabase.co/*",
     "*://*.jsdelivr.net/*"
