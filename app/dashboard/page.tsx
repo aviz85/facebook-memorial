@@ -73,8 +73,14 @@ export default function DashboardPage() {
 
   const fetchPendingRecords = async () => {
     try {
-      const data = await getPendingFallenRecords();
-      setPendingRecords(data);
+      const response = await fetch('/api/admin/pending');
+      const result = await response.json();
+      
+      if (response.ok) {
+        setPendingRecords(result.data);
+      } else {
+        throw new Error(result.error || 'Failed to fetch pending records');
+      }
     } catch (err: any) {
       setError('שגיאה בטעינת הבקשות הממתינות');
       console.error(err);
@@ -85,7 +91,20 @@ export default function DashboardPage() {
 
   const handleApprove = async (id: string) => {
     try {
-      await approveFallenRecord(id);
+      const response = await fetch('/api/admin/approve', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id }),
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to approve entry');
+      }
+      
       setSuccess('הרשומה אושרה בהצלחה');
       // Remove the approved record from the list
       setPendingRecords(pendingRecords.filter(record => record.id !== id));
