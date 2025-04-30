@@ -3,6 +3,10 @@
   "name": "Facebook Memorial Feed",
   "version": "1.0.0",
   "description": "מחליף את הפיד בפייסבוק בתמונות זיכרון של הנופלים ביום הזיכרון לחללי מערכות ישראל",
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "content_scripts": [
     {
       "matches": ["*://*.facebook.com/*"],

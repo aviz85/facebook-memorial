@@ -1,3 +1,5 @@
+console.log('Facebook Memorial Feed extension loaded!');
+
 // Configuration - Supabase credentials
 const SUPABASE_URL = 'https://nuepjimdxzybberqffds.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51ZXBqaW1keHp5YmJlcnFmZmRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU5OTMyMTksImV4cCI6MjA2MTU2OTIxOX0.JI-XONtQgrTTJPdli01Ot84r1JwtYNSWodjflNzdwCU';
@@ -12,8 +14,9 @@ async function initMemorialFeed() {
   try {
     console.log('Facebook Memorial Feed extension initializing...');
     
-    // Check if it's Israel Memorial Day (can be removed for testing)
-    if (!isMemorialDay() && !isExtensionForceEnabled()) {
+    // Check if it's Israel Memorial Day or if extension is force enabled
+    const isForceEnabled = await isExtensionForceEnabled();
+    if (!isMemorialDay() && !isForceEnabled) {
       console.log('Not Memorial Day and extension not forced, exiting');
       return;
     }
@@ -71,22 +74,18 @@ function isMemorialDay() {
 
 // Check if user enabled the extension in settings
 function isExtensionForceEnabled() {
-  // This implementation is simplified for the tests
-  // In a real implementation, we should use the chrome.storage API properly with promises or callbacks
-  try {
-    let isEnabled = false;
-    
-    // Use a synchronous approach for tests to work
-    // Note: In production, this should be replaced with a proper async implementation
-    chrome.storage.sync.get(['forceEnabled'], (result) => {
-      isEnabled = result.forceEnabled === true;
-    });
-    
-    return isEnabled;
-  } catch (error) {
-    console.error('Error checking if extension is force enabled:', error);
-    return false; // Default to disabled if there's an error
-  }
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.sync.get(['forceEnabled'], (result) => {
+        const isEnabled = result.forceEnabled === true;
+        console.log('Extension force enabled setting:', isEnabled);
+        resolve(isEnabled);
+      });
+    } catch (error) {
+      console.error('Error checking if extension is force enabled:', error);
+      resolve(false); // Default to disabled if there's an error
+    }
+  });
 }
 
 // Hide the original Facebook feed
@@ -265,13 +264,28 @@ function showSlide(index) {
   }
 }
 
-// Run once the page is fully loaded
-window.addEventListener('load', () => {
-  // Small delay to ensure Facebook's content is loaded
-  setTimeout(initMemorialFeed, 1000);
+// Wait for the page to be loaded
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, will initialize memorial feed shortly');
+  
+  // Short delay to ensure page is fully rendered
+  setTimeout(() => {
+    initMemorialFeed();
+  }, 1000);
 });
 
-// Run if the page was already loaded
-if (document.readyState === 'complete') {
-  setTimeout(initMemorialFeed, 1000);
-} 
+// Also try to initialize after window loads
+window.addEventListener('load', () => {
+  console.log('Window loaded, will initialize memorial feed shortly');
+  
+  // Short delay to ensure page is fully rendered
+  setTimeout(() => {
+    initMemorialFeed();
+  }, 1000);
+});
+
+// Initialize right away for cases where the page is already loaded
+console.log('Attempting immediate initialization');
+setTimeout(() => {
+  initMemorialFeed();
+}, 500); 
