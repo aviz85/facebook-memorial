@@ -3,11 +3,6 @@
   "name": "Facebook Memorial Feed",
   "version": "1.0.0",
   "description": "מחליף את הפיד בפייסבוק בתמונות זיכרון של הנופלים ביום הזיכרון לחללי מערכות ישראל",
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
   "content_scripts": [
     {
       "matches": ["*://*.facebook.com/*"],
