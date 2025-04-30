@@ -88,7 +88,7 @@ export default function SubmitPage() {
       setFile(null);
     } catch (err: any) {
       console.error('Error submitting form:', err);
-      setError(err.message || 'אירעה שגיאה בעת שליחת הטופס. אנא נסה שנית מאוחר יותר.');
+      setError('אירעה שגיאה בעת שליחת הטופס. אנא נסה שנית מאוחר יותר.');
     } finally {
       setIsSubmitting(false);
     }
@@ -121,7 +121,7 @@ export default function SubmitPage() {
         </h1>
         
         {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md" data-testid="error-message">
             {error}
           </div>
         )}

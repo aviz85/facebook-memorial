@@ -96,7 +96,10 @@ global.chrome = {
   storage: {
     sync: {
       get: jest.fn((keys, callback) => {
-        callback({ forceEnabled: true });
+        if (callback) {
+          callback({ forceEnabled: true });
+        }
+        return { forceEnabled: true };
       }),
       set: jest.fn()
     }
@@ -116,6 +119,8 @@ const contentScriptMock = {
   },
   
   isExtensionForceEnabled() {
+    // Call the mock get function and track it for test assertions
+    global.chrome.storage.sync.get(['forceEnabled'], (result) => {});
     return true;
   },
   
@@ -130,6 +135,13 @@ const contentScriptMock = {
   
   injectMemorialFeed() {
     // מוק לפונקציית הזרקת תוכן זיכרון
+    if (!mockDOMElements.memorialContainer) {
+      mockDOMElements.memorialContainer = document.createElement('div');
+    }
+    if (!mockDOMElements.slideshowContainer) {
+      mockDOMElements.slideshowContainer = document.createElement('div');
+    }
+    
     const container = mockDOMElements.memorialContainer;
     const slideshow = mockDOMElements.slideshowContainer;
     
