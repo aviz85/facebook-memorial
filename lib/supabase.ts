@@ -13,6 +13,7 @@ export type FallenRecord = {
   name: string;
   image_path: string;
   approved: boolean;
+  rejected: boolean;
   uploader_id?: string;
   created_at: string;
   connection_context?: string;

@@ -12,6 +12,7 @@ export default function DashboardPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('pending');
 
   // Check if user is authenticated on component mount
   useEffect(() => {
@@ -71,9 +72,9 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchPendingRecords = async () => {
+  const fetchPendingRecords = async (filter = statusFilter) => {
     try {
-      const response = await fetch('/api/admin/pending');
+      const response = await fetch(`/api/admin/pending?filter=${filter}`);
       const result = await response.json();
       
       if (response.ok) {
@@ -82,7 +83,7 @@ export default function DashboardPage() {
         throw new Error(result.error || 'Failed to fetch pending records');
       }
     } catch (err: any) {
-      setError('שגיאה בטעינת הבקשות הממתינות');
+      setError('שגיאה בטעינת הבקשות');
       console.error(err);
     } finally {
       setLoading(false);
@@ -117,6 +118,43 @@ export default function DashboardPage() {
       setError('שגיאה באישור הרשומה');
       console.error(err);
     }
+  };
+
+  // New function to handle rejection
+  const handleReject = async (id: string) => {
+    try {
+      const response = await fetch('/api/admin/reject', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id }),
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to reject entry');
+      }
+      
+      setSuccess('הרשומה נדחתה');
+      // Remove the rejected record from the list
+      setPendingRecords(pendingRecords.filter(record => record.id !== id));
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccess(null);
+      }, 3000);
+    } catch (err) {
+      setError('שגיאה בדחיית הרשומה');
+      console.error(err);
+    }
+  };
+
+  // New function to handle filter change
+  const handleFilterChange = (filter: string) => {
+    setStatusFilter(filter);
+    fetchPendingRecords(filter);
   };
 
   // Handle logout
@@ -210,18 +248,69 @@ export default function DashboardPage() {
         </div>
       )}
       
-      <div className="mb-4 flex justify-between items-center">
-        <h2 className="text-xl font-semibold">בקשות ממתינות לאישור</h2>
-        <Link 
-          href="/" 
-          className="bg-gray-200 text-memorial-gray px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
-        >
-          חזרה לדף הראשי
-        </Link>
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="text-xl font-semibold">
+            {statusFilter === 'pending' && 'בקשות ממתינות לאישור'}
+            {statusFilter === 'rejected' && 'בקשות שנדחו'}
+            {statusFilter === 'approved' && 'בקשות שאושרו'}
+            {statusFilter === 'all' && 'כל הבקשות'}
+          </h2>
+          <Link 
+            href="/" 
+            className="bg-gray-200 text-memorial-gray px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
+          >
+            חזרה לדף הראשי
+          </Link>
+        </div>
+        
+        {/* Filter tabs */}
+        <div className="flex border-b border-gray-200 mb-4">
+          <button
+            onClick={() => handleFilterChange('pending')}
+            className={`px-4 py-2 font-medium ${
+              statusFilter === 'pending'
+                ? 'border-b-2 border-memorial-blue text-memorial-blue'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            ממתינות
+          </button>
+          <button
+            onClick={() => handleFilterChange('rejected')}
+            className={`px-4 py-2 font-medium ${
+              statusFilter === 'rejected'
+                ? 'border-b-2 border-memorial-blue text-memorial-blue'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            נדחו
+          </button>
+          <button
+            onClick={() => handleFilterChange('approved')}
+            className={`px-4 py-2 font-medium ${
+              statusFilter === 'approved'
+                ? 'border-b-2 border-memorial-blue text-memorial-blue'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            אושרו
+          </button>
+          <button
+            onClick={() => handleFilterChange('all')}
+            className={`px-4 py-2 font-medium ${
+              statusFilter === 'all'
+                ? 'border-b-2 border-memorial-blue text-memorial-blue'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            הכל
+          </button>
+        </div>
       </div>
       
       {pendingRecords.length === 0 ? (
-        <p className="text-gray-600 dark:text-gray-400">אין בקשות ממתינות לאישור.</p>
+        <p className="text-gray-600 dark:text-gray-400">אין בקשות להצגה בסטטוס זה.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {pendingRecords.map(record => (
@@ -250,12 +339,53 @@ export default function DashboardPage() {
                   </div>
                 )}
                 
-                <button 
-                  onClick={() => handleApprove(record.id)}
-                  className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition-colors"
-                >
-                  אשר
-                </button>
+                {/* Status badges */}
+                {record.approved && (
+                  <div className="mb-2 inline-block px-2 py-1 bg-green-100 text-green-800 rounded-md text-xs">מאושר</div>
+                )}
+                {record.rejected && (
+                  <div className="mb-2 inline-block px-2 py-1 bg-red-100 text-red-800 rounded-md text-xs">נדחה</div>
+                )}
+                
+                {/* Action buttons - show based on status */}
+                {!record.approved && !record.rejected && (
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleApprove(record.id)}
+                      className="flex-1 bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition-colors"
+                    >
+                      אישור
+                    </button>
+                    <button 
+                      onClick={() => handleReject(record.id)}
+                      className="flex-1 bg-red-600 text-white py-2 rounded-md hover:bg-red-700 transition-colors"
+                    >
+                      דחייה
+                    </button>
+                  </div>
+                )}
+                
+                {/* For approved/rejected entries, allow status change */}
+                {(record.approved || record.rejected) && (
+                  <div className="flex gap-2">
+                    {record.rejected && (
+                      <button 
+                        onClick={() => handleApprove(record.id)}
+                        className="flex-1 bg-green-600 text-white py-2 rounded-md hover:bg-green-700 transition-colors"
+                      >
+                        אישור
+                      </button>
+                    )}
+                    {record.approved && (
+                      <button 
+                        onClick={() => handleReject(record.id)}
+                        className="flex-1 bg-red-600 text-white py-2 rounded-md hover:bg-red-700 transition-colors"
+                      >
+                        דחייה
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}
