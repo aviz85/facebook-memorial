@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Create a Supabase client using environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// Fallback to placeholder values during build to avoid errors
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder-for-build.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key-for-build';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -14,6 +15,7 @@ export type FallenRecord = {
   approved: boolean;
   uploader_id?: string;
   created_at: string;
+  connection_context?: string;
 };
 
 // Function to get approved fallen records

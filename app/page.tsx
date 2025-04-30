@@ -1,6 +1,18 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link'
+import AboutModal from './components/AboutModal';
+import ExtensionDownloadLink from './components/ExtensionDownloadLink';
 
 export default function Home() {
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
+  
+  // Set RTL direction for Hebrew text
+  useEffect(() => {
+    document.documentElement.dir = 'rtl';
+  }, []);
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
       <div className="max-w-3xl mx-auto bg-white dark:bg-memorial-gray rounded-lg shadow-lg p-8 my-8">
@@ -21,6 +33,13 @@ export default function Home() {
             העלאת תמונה ופרטים
           </Link>
           
+          <button
+            onClick={() => setIsAboutModalOpen(true)}
+            className="bg-gray-100 dark:bg-gray-700 text-memorial-blue dark:text-white px-6 py-3 rounded-md text-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            על הפרויקט
+          </button>
+          
           <Link 
             href="/dashboard" 
             className="bg-gray-200 text-memorial-gray px-6 py-3 rounded-md text-lg font-medium hover:bg-gray-300 transition-colors"
@@ -32,10 +51,16 @@ export default function Home() {
         <div className="mt-12 text-sm text-gray-600 dark:text-gray-400">
           <p>
             התוסף לדפדפן כרום מחליף את הפיד של פייסבוק בתמונות זיכרון של הנופלים.
-            <a href="#" className="text-blue-600 dark:text-blue-400 underline ml-2">הורדת התוסף</a>
+            <ExtensionDownloadLink />
           </p>
         </div>
       </div>
+      
+      {/* About Modal */}
+      <AboutModal 
+        isOpen={isAboutModalOpen} 
+        onClose={() => setIsAboutModalOpen(false)}
+      />
     </div>
   )
 } 

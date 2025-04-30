@@ -129,9 +129,16 @@ export default function DashboardPage() {
               
               <div className="p-4">
                 <h3 className="text-lg font-medium mb-2">{record.name}</h3>
-                <p className="text-sm text-gray-500 mb-4">
+                <p className="text-sm text-gray-500 mb-1">
                   נוסף: {new Date(record.created_at).toLocaleDateString('he-IL')}
                 </p>
+                
+                {record.connection_context && (
+                  <div className="mb-3 p-2 bg-gray-50 dark:bg-gray-700 rounded-md text-sm">
+                    <h4 className="font-medium mb-1">הקשר/מידע נוסף:</h4>
+                    <p className="text-gray-700 dark:text-gray-300">{record.connection_context}</p>
+                  </div>
+                )}
                 
                 <button 
                   onClick={() => handleApprove(record.id)}
