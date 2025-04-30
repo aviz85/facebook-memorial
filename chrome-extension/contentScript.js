@@ -458,11 +458,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'checkStatus') {
     console.log('Status check received, extension is active');
     sendResponse({ status: 'active' });
-    
+  }
+  else if (message.action === 'forceRefresh') {
+    console.log('Force refresh requested');
     // Force reinitialize
     initMemorialFeed();
+    sendResponse({ status: 'refreshing' });
   }
   
   // Return true to indicate async response
   return true;
+});
+
+// Also listen for direct activation event from the page
+document.addEventListener('facebookMemorialFeedActivate', (event) => {
+  console.log('Received direct activation event', event.detail);
+  initMemorialFeed();
 }); 

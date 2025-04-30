@@ -13,6 +13,47 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// Listen for messages from popup or content script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Background received message:', message);
+  
+  if (message.action === 'forceReloadContentScript') {
+    // Force reload the content script in the sender tab
+    const tabId = sender.tab?.id;
+    
+    if (tabId) {
+      console.log('Force reloading content script in tab', tabId);
+      
+      // Inject the content script manually
+      chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        files: ['contentScript.js']
+      }, (results) => {
+        console.log('Script injection results:', results);
+        if (chrome.runtime.lastError) {
+          console.error('Error injecting script:', chrome.runtime.lastError);
+        }
+      });
+      
+      // Also inject the CSS
+      chrome.scripting.insertCSS({
+        target: { tabId: tabId },
+        files: ['styles.css']
+      }, () => {
+        if (chrome.runtime.lastError) {
+          console.error('Error injecting CSS:', chrome.runtime.lastError);
+        }
+      });
+    }
+    
+    // Acknowledge message
+    sendResponse({ status: 'reloading' });
+  }
+  
+  // Return true to indicate async response
+  return true;
+});
+
 // Listen for tab updates to ensure content script is injected
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // Only act on Facebook urls

@@ -7,6 +7,10 @@
     "page": "options.html",
     "open_in_tab": true
   },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Facebook Memorial Feed"
+  },
   "background": {
     "service_worker": "background.js"
   },
@@ -18,7 +22,7 @@
       "run_at": "document_start"
     }
   ],
-  "permissions": ["activeTab", "storage", "tabs"],
+  "permissions": ["activeTab", "storage", "tabs", "scripting"],
   "host_permissions": [
     "*://*.supabase.co/*",
     "*://*.jsdelivr.net/*"
