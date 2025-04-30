@@ -4,6 +4,43 @@ document.addEventListener('DOMContentLoaded', function() {
   const enableCheckbox = document.getElementById('enable-outside-memorial-day');
   const refreshButton = document.getElementById('refresh-button');
   
+  // Add debug element to popup
+  const debugElement = document.createElement('div');
+  debugElement.innerHTML = `
+    <hr>
+    <div>
+      <h3 style="margin-top: 5px; font-size: 14px;">אפשרויות נוספות:</h3>
+      <button id="show-logs" style="margin-top: 5px; background-color: #4267B2; color: white; border: none; padding: 5px 10px; border-radius: 4px; width: 100%;">צפה בלוגים</button>
+      <button id="refresh-page" style="margin-top: 5px; background-color: #4267B2; color: white; border: none; padding: 5px 10px; border-radius: 4px; width: 100%;">רענן דף מלא</button>
+    </div>
+  `;
+  document.body.appendChild(debugElement);
+  
+  // Setup debug log button
+  document.getElementById('show-logs').addEventListener('click', function() {
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+      // Execute script to open console in the current tab
+      chrome.scripting.executeScript({
+        target: {tabId: tabs[0].id},
+        function: function() {
+          console.log('%c=============== FACEBOOK MEMORIAL LOGS ===============', 'color: #4267B2; font-weight: bold; font-size: 14px;');
+          console.log('Check the logs above for debugging information');
+          // This will typically open the console automatically on most browsers
+          console.log('Right-click on page > Inspect > Console to see more logs');
+          console.log('%c===================================================', 'color: #4267B2; font-weight: bold; font-size: 14px;');
+        }
+      });
+    });
+  });
+  
+  // Setup page refresh button
+  document.getElementById('refresh-page').addEventListener('click', function() {
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+      chrome.tabs.reload(tabs[0].id);
+      window.close();
+    });
+  });
+  
   // Load saved settings
   chrome.storage.sync.get(['forceEnabled'], function(result) {
     enableCheckbox.checked = result.forceEnabled === true;

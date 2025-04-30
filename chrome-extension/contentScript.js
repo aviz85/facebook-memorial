@@ -21,6 +21,10 @@ async function initMemorialFeed() {
   try {
     console.log('Facebook Memorial Feed extension initializing...');
     
+    // Add debugging for DOM readiness
+    console.log('Document ready state:', document.readyState);
+    console.log('Feed element exists:', !!document.querySelector('div[role="feed"]'));
+    
     // Check if it's Israel Memorial Day or if extension is force enabled
     const isForceEnabled = await isExtensionForceEnabled();
     console.log('Force enabled check completed:', isForceEnabled);
@@ -49,7 +53,14 @@ async function initMemorialFeed() {
         throw new Error(`HTTP error! status: ${countResponse.status}`);
       }
       
-      totalRecords = parseInt(countResponse.headers.get('content-range').split('/')[1]);
+      const contentRange = countResponse.headers.get('content-range');
+      console.log('Content range header:', contentRange);
+      
+      if (!contentRange) {
+        throw new Error('Missing content-range header');
+      }
+      
+      totalRecords = parseInt(contentRange.split('/')[1]);
       console.log(`Total available records: ${totalRecords}`);
       
       // Fetch first batch of records
@@ -60,7 +71,16 @@ async function initMemorialFeed() {
       }
       
       // Hide Facebook feed and inject memorial feed
-      hideOriginalFeed();
+      const feedHidden = hideOriginalFeed();
+      console.log('Feed hiding result:', feedHidden);
+      
+      if (!feedHidden) {
+        console.log('Feed elements not found yet, will retry soon');
+        // Schedule a retry
+        setTimeout(initMemorialFeed, 2000);
+        return;
+      }
+      
       injectMemorialFeed();
       startSlideshow();
     } catch (fetchError) {
@@ -223,6 +243,19 @@ function isExtensionForceEnabled() {
 
 // Hide the original Facebook feed
 function hideOriginalFeed() {
+  // Add a visual debug element to the page to show the script is running
+  const debugMark = document.createElement('div');
+  debugMark.style.position = 'fixed';
+  debugMark.style.bottom = '10px';
+  debugMark.style.right = '10px';
+  debugMark.style.padding = '5px 10px';
+  debugMark.style.backgroundColor = 'rgba(0,0,0,0.7)';
+  debugMark.style.color = 'white';
+  debugMark.style.zIndex = '9999';
+  debugMark.style.borderRadius = '4px';
+  debugMark.textContent = 'Memorial Feed Active';
+  document.body.appendChild(debugMark);
+
   // Primary candidates to hide - using a combination of robust selectors
   const feedSelectors = [
     // Feed containers by role attribute (most stable)
@@ -231,31 +264,48 @@ function hideOriginalFeed() {
     'div.x193iq5w',
     // Post creation area
     'div[aria-label="Create a post"]',
+    'div[aria-label="יצירת פוסט"]', // Hebrew version
     // Common feed item containers
     '.x1lliihq',
-    // Additional feed identifiers
+    // Facebook news feed containers
     '[data-pagelet="FeedUnit"]',
     '#stream_pagelet',
-    '[data-pagelet="Stories"]'
+    '[data-pagelet="Stories"]',
+    // More precise feed content containers
+    'div.x1hc1fzr',
+    'div.x1iorvi4',
+    // Timeline containers
+    'div[role="main"] > div > div > div > div',
+    'div.x78zum5',
+    'div[data-pagelet="ProfileTimeline"]'
   ];
   
   // Use content-based fallback selectors as well
   const contentSelectors = [
     // Elements containing typical feed texts
     'span:contains("What\'s on your mind")',
-    'h3:contains("Create a post")'
+    'span:contains("מה בראש שלך")', // Hebrew version
+    'h3:contains("Create a post")',
+    'h3:contains("יצירת פוסט")' // Hebrew version
   ];
   
   let feedElementsFound = false;
   
   // Try to find and hide feed elements
   for (const selector of feedSelectors) {
-    const elements = document.querySelectorAll(selector);
-    if (elements.length > 0) {
-      feedElementsFound = true;
-      for (const element of elements) {
-        element.style.display = 'none';
+    try {
+      const elements = document.querySelectorAll(selector);
+      console.log(`Selector "${selector}" found ${elements.length} elements`);
+      
+      if (elements.length > 0) {
+        feedElementsFound = true;
+        for (const element of elements) {
+          element.style.display = 'none';
+          console.log('Hidden element:', element);
+        }
       }
+    } catch (e) {
+      console.error(`Error with selector "${selector}":`, e);
     }
   }
   
@@ -264,6 +314,8 @@ function hideOriginalFeed() {
     for (const selector of contentSelectors) {
       try {
         const elements = document.querySelectorAll(selector);
+        console.log(`Content selector "${selector}" found ${elements.length} elements`);
+        
         for (const element of elements) {
           // Hide the fourth ancestor which is typically the feed container
           let parent = element;
@@ -272,20 +324,25 @@ function hideOriginalFeed() {
           }
           if (parent) {
             parent.style.display = 'none';
+            console.log('Hidden parent element:', parent);
             feedElementsFound = true;
           }
         }
       } catch (e) {
-        console.log("Error with selector:", selector, e);
+        console.error(`Error with content selector "${selector}":`, e);
       }
     }
   }
   
   // Find a good insertion point - prioritize main content area
-  return document.querySelector('[role="main"]') || 
+  const insertionTarget = document.querySelector('[role="main"]') || 
          document.querySelector('div.x193iq5w') || 
          document.querySelector('div.xod5an3') || 
          document.body;
+  
+  console.log('Found insertion target:', insertionTarget);
+  
+  return feedElementsFound;
 }
 
 // Inject our memorial feed container
@@ -414,15 +471,42 @@ function showSlide(index) {
   preloadNextImages();
 }
 
-// For early loading on page load
+// Set up repeated checks to make sure the extension activates properly
+let activationAttempts = 0;
+const MAX_ACTIVATION_ATTEMPTS = 10;
+const ACTIVATION_INTERVAL = 2000; // 2 seconds
+
+function attemptActivation() {
+  console.log(`Activation attempt ${activationAttempts + 1}/${MAX_ACTIVATION_ATTEMPTS}`);
+  
+  if (activationAttempts >= MAX_ACTIVATION_ATTEMPTS) {
+    console.log('Reached max activation attempts');
+    return;
+  }
+  
+  activationAttempts++;
+  
+  // Check if the feed is present yet
+  const feedElement = document.querySelector('div[role="feed"]');
+  
+  if (feedElement) {
+    console.log('Feed element found, initializing memorial feed');
+    initMemorialFeed();
+  } else {
+    console.log('Feed element not found yet, will retry soon');
+    setTimeout(attemptActivation, ACTIVATION_INTERVAL);
+  }
+}
+
+// Start activation attempts when the DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded, initializing immediately');
-    initMemorialFeed();
+    console.log('DOM loaded, starting activation attempts');
+    setTimeout(attemptActivation, 1000);
   });
 } else {
-  console.log('Document already loaded, initializing immediately');
-  initMemorialFeed();
+  console.log('Document already loaded, starting activation attempts');
+  setTimeout(attemptActivation, 1000);
 }
 
 // Wait for the page to be loaded
