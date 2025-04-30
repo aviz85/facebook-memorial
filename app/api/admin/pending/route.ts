@@ -5,9 +5,9 @@ import { cookies } from 'next/headers';
 export async function GET() {
   // Check if user is authenticated as admin
   const cookieStore = cookies();
-  const adminCookie = cookieStore.get('admin-auth');
+  const adminCookie = cookieStore.get('admin_auth');
   
-  if (!adminCookie) {
+  if (!adminCookie || adminCookie.value !== 'true') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   
